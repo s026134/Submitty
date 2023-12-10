@@ -22,6 +22,8 @@ use app\models\GradingOrder;
 use Symfony\Component\Routing\Annotation\Route;
 use app\models\notebook\SubmissionCodeBox;
 use app\models\notebook\SubmissionMultipleChoice;
+// Adds Fpdi library for getting page count of pdfs
+use setasign\Fpdi\Fpdi;
 
 class SubmissionController extends AbstractController {
     private $upload_details = [
@@ -343,6 +345,7 @@ class SubmissionController extends AbstractController {
      * @Route("/courses/{_semester}/{_course}/gradeable/{gradeable_id}/bulk", methods={"POST"})
      */
     public function ajaxBulkUpload($gradeable_id) {
+
         $is_qr = isset($_POST['use_qr_codes']) && $_POST['use_qr_codes'] === "true";
 
         if (!isset($_POST['num_pages']) && !$is_qr) {
@@ -395,8 +398,6 @@ class SubmissionController extends AbstractController {
             return $this->uploadResult("File(s) uploaded too large.  Maximum size is " . ($max_size / 1000) . " kb. Uploaded file(s) was " . ($file_size / 1000) . " kb.", false);
         }
 
-        // creating uploads/bulk_pdf/gradeable_id directory
-
         $pdf_path = FileUtils::joinPaths($this->core->getConfig()->getCoursePath(), "uploads", "bulk_pdf", $gradeable->getId());
         if (!FileUtils::createDir($pdf_path)) {
             return $this->uploadResult("Failed to make gradeable path.", false);
@@ -428,6 +429,19 @@ class SubmissionController extends AbstractController {
             }
         }
 
+        // Initialize new instance of FPDI and get page count
+        if (isset($dst)) {
+            $pdf = new Fpdi();
+            $actual_page_count = $pdf->setSourceFile($dst);
+
+            // Check if the actual page count matches the expected count
+            if ($actual_page_count % $num_pages !== 0) {
+                $error_message = "The PDF page count ($actual_page_count) is not divisible by the expected count per exam ($num_pages).";
+                return $this->core->getOutput()->renderJsonFail($error_message);
+            }
+        }
+
+        // pdf_check.cgi DEPRECATED
         // use pdf_check.cgi to check that # of pages is valid and split
         // also get the cover image and name for each pdf appropriately
 
